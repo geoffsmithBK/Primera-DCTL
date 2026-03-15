@@ -3,8 +3,11 @@
 A "micro" version of a more ambitious project, presented here in simplified DCTL form. Primera-DCTL is an all-in-one "primary+" color grading DCTL for DaVinci Resolve Studio. It brings together my favorite ways of adjusting:
 
 - Exposure
+- Black point
 - Color balance ("temp & tint")
 - Contrast / Pivot
+- Shadows / Highlights
+- Highlight roll-off
 - Saturation
 - Per-color hue and density
 
@@ -31,23 +34,35 @@ Each slider, or group of sliders, tackles a primary color grading operation usin
 
 Primera-DCTL uses linear gain (`Gain = 2^n`) to apply mathematically "correct" +/- exposure adjustments in photographic stops. As such, this operation is performed in linear light-space before being applied to the currently selected transfer function.
 
-### 2. Color Balance ("Temp & Tint")
+### 2. Black Point
+
+Scene-linear flare correction, modeled on the physical phenomenon of veiling glare: a constant amount of stray light is subtracted from the signal in linear light-space. An exponential soft toe near zero ensures values compress smoothly toward black rather than hard-clipping. Dragging the slider left (negative) lowers the black point; dragging right raises it.
+
+### 3. Color Balance ("Temp & Tint")
 
 Color balance is applied as per-channel linear gain in linear light-space, alongside exposure, within a single decode/encode round trip. The Temp slider shifts the blue-yellow axis (R and B gain inversely) and the Tint slider shifts the green-magenta axis (G gain), emulating an adjustment to the camera's white balance at the time of shooting.
 
-### 3. Contrast / Pivot
+### 4. Contrast / Pivot
 
-Contrast is applied as a rolling power curve in log space using `pow(x/pivot, contrast) * pivot`, which produces a natural S-curve that is self-limiting at the extremes. The pivot automatically adapts to the encoded mid-gray (0.18 linear) of the currently selected transfer function. An additional Pivot Offset slider allows shifting the pivot point up or down, effectively serving as a midtone brightness control.
+Contrast is applied as a rolling power curve in log space using `pow(x/pivot, contrast) * pivot`, which produces a natural S-curve that is self-limiting at the extremes. The pivot automatically adapts to the encoded mid-gray (0.18 linear) of the currently selected transfer function. The Pivot slider allows shifting the pivot point up or down, effectively serving as a midtone brightness control.
 
-### 4. Saturation
+### 5. Shadows / Highlights
+
+Shadows and Highlights are symmetrical regional gain controls operating in log space. Shadows applies gain constrained below mid-grey using a smoothstep blend, effectively acting as a fill light for recovering shadow detail after contrast or black point adjustments. Highlights applies gain constrained above mid-grey, offering control over the upper tonal range. Both use stop-based gain (`2^n`) consistent with the Exposure slider.
+
+### 6. Roll Off
+
+Highlight roll-off using tanh compression. A single "smart" slider where 0-1 moves the compression knee from white down toward mid-grey, and 1-2 progressively lowers the highlight ceiling for increasingly aggressive roll-off. The slope at the knee is always preserved for a seamless join with uncompressed values.
+
+### 7. Saturation
 
 Primera-DCTL's approach to increasing saturation works by applying positive linear gain values to the saturation channel of the image in HSV space. Negative saturation, i.e. moving the slider below the "0" point on its scale, works via decimal multiplication in RGB space. Both operations can optionally attempt to preserve the image's perceptual "brightness" via the "Preserve Luminance" checkbox.
 
-### 5. Per-Color Hue and Density
+### 8. Per-Color Hue and Density
 
 These sliders represent the "+" part of "primary+" in the initial description of Primera-DCTL above. Six pairs of Hue and Density sliders — one for each of the primary and secondary colors (Red, Yellow, Green, Cyan, Blue, Magenta) — provide per-color control via tetrahedral interpolation of the RGB cube.
 
-Hue shifts are implemented as true Rodrigues rotations of each cube corner's chromatic component around the achromatic axis, giving perceptually uniform rotation across the entire hue wheel. Each slider's ±1.0 range maps to ±60° of rotation (one sextant), allowing any color to be pushed all the way to its neighbor. Density adds a uniform luminance offset to a given color region — positive brightens, negative darkens.
+Hue shifts are implemented as true Rodrigues rotations of each cube corner's chromatic component around the achromatic axis, giving perceptually uniform rotation across the entire hue wheel. Each slider's +/-1.0 range maps to +/-60 degrees of rotation (one sextant), allowing any color to be pushed all the way to its neighbor. Density adds a uniform luminance offset to a given color region — positive brightens, negative darkens.
 
 The tetrahedral decomposition itself follows the standard Sakamoto method (6 tetrahedra along the black-white diagonal, selected by channel sort order), inspired by Steve Yedlin's work on display preparation and the many community DCTL implementations it spawned.
 

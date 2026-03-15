@@ -8,10 +8,14 @@
 
 DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_PINES2, TF_DI, TF_CINEON}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, Pines2, DaVinci Intermediate, Cineon})
 DEFINE_UI_PARAMS(p_exposure, Exposure Stops, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
+DEFINE_UI_PARAMS(p_bp, Black Point, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
 DEFINE_UI_PARAMS(p_temp, Temp, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_tint, Tint, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_contrast, Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001)
-DEFINE_UI_PARAMS(p_pivot_offset, Pivot Offset, DCTLUI_SLIDER_FLOAT, 0.0, -0.2, 0.2, 0.001)
+DEFINE_UI_PARAMS(p_pivot_offset, Pivot, DCTLUI_SLIDER_FLOAT, 0.0, -0.2, 0.2, 0.001)
+DEFINE_UI_PARAMS(p_shadows, Shadows, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_highlights, Highlights, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_high_soft, Roll Off, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 2.0, 0.001)
 DEFINE_UI_PARAMS(p_sat, Saturation, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_preserve_lum, Preserve Luma - Sat, DCTLUI_CHECK_BOX, 0)
 DEFINE_UI_PARAMS(p_red_hue, Red Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
@@ -260,6 +264,57 @@ __DEVICE__ float luminance(float r, float g, float b) {
     return 0.2126f * r + 0.7152f * g + 0.0722f * b;
 }
 
+// Black Point: scene-linear flare correction with exponential soft toe.
+// Subtracts bp from the signal; values near zero compress smoothly
+// via exp() rather than hard-clipping. C1 continuous at the knee.
+__DEVICE__ float soft_black_point(float x, float bp, float knee) {
+    if (x <= 0.0f) return x; // out-of-range guard
+    float corrected = x - bp;
+    if (corrected >= knee) return corrected;
+    return knee * _expf(corrected / knee - 1.0f);
+}
+
+// Shadows: fill light via gain constrained below mid-grey.
+// Gain fades from full effect at black to identity at mid-grey
+// using smoothstep for a seamless join.
+__DEVICE__ float shadow_fill(float x, float gain, float mid) {
+    if (x <= 0.0f) return x; // out-of-range guard
+    if (x >= mid) return x;
+    float t = x / mid;
+    float blend = t * t * (3.0f - 2.0f * t); // smoothstep
+    return x * (gain + (1.0f - gain) * blend);
+}
+
+// Highlights: gain constrained above mid-grey.
+// Mirror of shadow_fill — gain fades from identity at mid-grey
+// to full effect at white using smoothstep.
+__DEVICE__ float highlight_gain(float x, float gain, float mid) {
+    if (x <= mid) return x;
+    if (x >= 1.0f) return x; // super-white guard
+    float t = (x - mid) / (1.0f - mid);
+    float blend = t * t * (3.0f - 2.0f * t); // smoothstep
+    return x * (1.0f + (gain - 1.0f) * blend);
+}
+
+// High Soft: highlight roll-off with tanh compression.
+// The slider controls the knee onset point (lower = earlier rolloff)
+// and the compression amount together as a single weighted control.
+// At 0: no compression. At 1: heavy compression starting near mid-grey.
+__DEVICE__ float soft_highlight(float x, float amount, float mid) {
+    if (x <= 0.0f) return x; // out-of-range guard
+    // 0-1: knee moves from 1.0 down toward mid-grey
+    // 1-2: knee stays at mid-grey, compression strength increases
+    float knee_amount = _fminf(amount, 1.0f);
+    float strength = 1.0f + _fmaxf(amount - 1.0f, 0.0f) * 2.0f; // 1x at 1.0, 3x at 2.0
+    float knee = 1.0f - knee_amount * (1.0f - mid);
+    if (x <= knee) return x;
+    float range = 1.0f - knee;
+    float t = (x - knee) / range * strength;
+    // tanh compression: dividing by strength keeps the slope at the knee
+    // unchanged while lowering the ceiling — more strength = more roll-off
+    return knee + range * _tanhf(t) / strength;
+}
+
 __DEVICE__ float rolling_contrast(float x, float contrast, float pivot) {
     // Guard: values at or below zero stay put (e.g. letterbox bars, below-black)
     if (x <= 0.0f) return x;
@@ -399,6 +454,15 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
     g *= gain;
     b *= gain;
 
+    // Black Point: scene-linear flare correction with soft toe
+    if (p_bp != 0.0f) {
+        float knee = 0.005f;
+        float bp = -p_bp; // slider down = lower black point (subtract more)
+        r = soft_black_point(r, bp, knee);
+        g = soft_black_point(g, bp, knee);
+        b = soft_black_point(b, bp, knee);
+    }
+
     // Color Balance: per-channel gains in linear light
     // Temp: blue-yellow axis (R and B inversely, G untouched)
     // Tint: green-magenta axis (G adjusted, R and B untouched)
@@ -420,6 +484,32 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
         r = rolling_contrast(r, con, pivot);
         g = rolling_contrast(g, con, pivot);
         b = rolling_contrast(b, con, pivot);
+    }
+
+    // Shadows: fill light - gain constrained below mid-grey in log space
+    if (p_shadows != 0.0f) {
+        float mid = encode(0.18f, p_tf);
+        float shd_gain = _powf(2.0f, p_shadows);
+        r = shadow_fill(r, shd_gain, mid);
+        g = shadow_fill(g, shd_gain, mid);
+        b = shadow_fill(b, shd_gain, mid);
+    }
+
+    // Highlights: gain constrained above mid-grey in log space
+    if (p_highlights != 0.0f) {
+        float mid = encode(0.18f, p_tf);
+        float hi_gain = _powf(2.0f, p_highlights);
+        r = highlight_gain(r, hi_gain, mid);
+        g = highlight_gain(g, hi_gain, mid);
+        b = highlight_gain(b, hi_gain, mid);
+    }
+
+    // High Soft: highlight roll-off / soft clip
+    if (p_high_soft > 0.0f) {
+        float mid = encode(0.18f, p_tf);
+        r = soft_highlight(r, p_high_soft, mid);
+        g = soft_highlight(g, p_high_soft, mid);
+        b = soft_highlight(b, p_high_soft, mid);
     }
 
     // Saturation (operates in log-encoded space)
