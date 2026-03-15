@@ -6,12 +6,14 @@
 // UI Parameters
 // ============================================================
 
-DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_PINES2, TF_DI}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, Pines2, DaVinci Intermediate})
+DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_PINES2, TF_DI, TF_CINEON}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, Pines2, DaVinci Intermediate, Cineon})
 DEFINE_UI_PARAMS(p_exposure, Exposure Stops, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
 DEFINE_UI_PARAMS(p_temp, Temp, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_tint, Tint, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_contrast, Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001)
+DEFINE_UI_PARAMS(p_pivot_offset, Pivot Offset, DCTLUI_SLIDER_FLOAT, 0.0, -0.2, 0.2, 0.001)
 DEFINE_UI_PARAMS(p_sat, Saturation, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
-DEFINE_UI_PARAMS(p_preserve_lum, Preserve Luminance (Sat.), DCTLUI_CHECK_BOX, 0)
+DEFINE_UI_PARAMS(p_preserve_lum, Preserve Luma - Sat, DCTLUI_CHECK_BOX, 0)
 
 // ============================================================
 // ARRI LogC3 (EI 800)
@@ -185,6 +187,21 @@ __DEVICE__ float lin_to_di(float x) {
 }
 
 // ============================================================
+// Cineon
+// Source: Kodak Cineon / antlerpost.com (Nick Shaw)
+// ============================================================
+
+__DEVICE__ float cineon_to_lin(float x) {
+    const float offset = 0.0108f;
+    return (_powf(10.0f, (x * 1023.0f - 685.0f) / 300.0f) - offset) / (1.0f - offset);
+}
+
+__DEVICE__ float lin_to_cineon(float x) {
+    const float offset = 0.0108f;
+    return (_log10f(x * (1.0f - offset) + offset) * 300.0f + 685.0f) / 1023.0f;
+}
+
+// ============================================================
 // Color space helpers
 // ============================================================
 
@@ -231,6 +248,21 @@ __DEVICE__ float luminance(float r, float g, float b) {
     return 0.2126f * r + 0.7152f * g + 0.0722f * b;
 }
 
+__DEVICE__ float rolling_contrast(float x, float contrast, float pivot) {
+    // Guard: values at or below zero stay put (e.g. letterbox bars, below-black)
+    if (x <= 0.0f) return x;
+    // Guard: values at or above 1.0 stay put (super-whites)
+    if (x >= 1.0f) return x;
+
+    if (x <= pivot) {
+        return _powf(x / pivot, contrast) * pivot;
+    } else {
+        float inv = 1.0f - x;
+        float inv_pivot = 1.0f - pivot;
+        return 1.0f - _powf(inv / inv_pivot, contrast) * inv_pivot;
+    }
+}
+
 // ============================================================
 // Dispatch helpers
 // ============================================================
@@ -244,6 +276,7 @@ __DEVICE__ float decode(float x, int tf) {
         case 4: return acescct_to_lin(x);
         case 5: return pines2_to_lin(x);
         case 6: return di_to_lin(x);
+        case 7: return cineon_to_lin(x);
         default: return x;
     }
 }
@@ -257,6 +290,7 @@ __DEVICE__ float encode(float x, int tf) {
         case 4: return lin_to_acescct(x);
         case 5: return lin_to_pines2(x);
         case 6: return lin_to_di(x);
+        case 7: return lin_to_cineon(x);
         default: return x;
     }
 }
@@ -290,8 +324,20 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
     g = encode(g, p_tf);
     b = encode(b, p_tf);
 
+    // Contrast: rolling power curve in log space
+    // Pivot auto-adapts to mid-gray (0.18 linear) for the selected TF
+    if (p_contrast != 1.0f || p_pivot_offset != 0.0f) {
+        float pivot = encode(0.18f, p_tf) + p_pivot_offset;
+        pivot = _fmaxf(0.01f, _fminf(pivot, 0.99f));
+        float con = (p_contrast != 1.0f) ? p_contrast : 1.0f;
+        r = rolling_contrast(r, con, pivot);
+        g = rolling_contrast(g, con, pivot);
+        b = rolling_contrast(b, con, pivot);
+    }
+
     // Saturation (operates in log-encoded space)
-    if (p_sat != 0.0f) {
+    // Guard: skip saturation for out-of-range pixels (below-black, super-white)
+    if (p_sat != 0.0f && r >= 0.0f && g >= 0.0f && b >= 0.0f) {
         float luma_before = luminance(r, g, b);
 
         if (p_sat > 0.0f) {
@@ -315,7 +361,7 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
         // Preserve Luminance: restore pre-saturation brightness
         if (p_preserve_lum == 1) {
             float luma_after = luminance(r, g, b);
-            if (luma_after > 0.0f) {
+            if (luma_after > 0.0f && luma_before > 0.0f) {
                 float ratio = luma_before / luma_after;
                 r *= ratio;
                 g *= ratio;

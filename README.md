@@ -21,6 +21,7 @@ It is designed to be used in the context of a fully color-managed workflow and s
 - ACEScct
 - Pines2 (based on Josh Pines' log2 encoding specification)
 - DaVinci Intermediate
+- Cineon
 
 ## How Each Stage Works
 
@@ -32,11 +33,11 @@ Primera-DCTL uses linear gain (`Gain = 2^n`) to apply mathematically "correct" +
 
 ### 2. Color Balance ("Temp & Tint")
 
-*(Coming soon)*
+Color balance is applied as per-channel linear gain in linear light-space, alongside exposure, within a single decode/encode round trip. The Temp slider shifts the blue-yellow axis (R and B gain inversely) and the Tint slider shifts the green-magenta axis (G gain), emulating an adjustment to the camera's white balance at the time of shooting.
 
 ### 3. Contrast / Pivot
 
-*(Coming soon)*
+Contrast is applied as a rolling power curve in log space using `pow(x/pivot, contrast) * pivot`, which produces a natural S-curve that is self-limiting at the extremes. The pivot automatically adapts to the encoded mid-gray (0.18 linear) of the currently selected transfer function. An additional Pivot Offset slider allows shifting the pivot point up or down, effectively serving as a midtone brightness control.
 
 ### 4. Saturation
 
