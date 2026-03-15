@@ -66,6 +66,15 @@ Hue shifts are implemented as true Rodrigues rotations of each cube corner's chr
 
 The tetrahedral decomposition itself follows the standard Sakamoto method (6 tetrahedra along the black-white diagonal, selected by channel sort order), inspired by Steve Yedlin's work on display preparation and the many community DCTL implementations it spawned.
 
+## Stop Chart
+
+A built-in diagnostic chart can be toggled via the "Show Chart" checkbox at the bottom of the UI. Inspired by Walter Volpatto's exposure chart, it replaces the image with:
+
+- **Upper half**: 17 vertical columns representing -8 to +8 photographic stops relative to mid-grey (0.18 linear), each displayed at its log-encoded value for the selected transfer function. Stops that fall outside the encoding's range clip naturally to black or white, visually indicating the usable dynamic range.
+- **Lower half**: A smooth gradient ramp from 0 to 1 in the selected log encoding, overlaid with the transfer function name and its mid-grey code value rendered in a blocky bitmap font.
+
+The chart outputs raw log-encoded values, so it responds correctly to whatever display transform is downstream (ACES, CST, OpenDRT, etc.).
+
 ## Compatibility
 
 Primera-DCTL can also be used as a starting point for look development when applied at the group or timeline level in Resolve. It does not encapsulate any transforms itself, but has been tested and used with the image formation methods I use most frequently:
