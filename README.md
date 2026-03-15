@@ -45,7 +45,11 @@ Primera-DCTL's approach to increasing saturation works by applying positive line
 
 ### 5. Per-Color Hue and Density
 
-These sliders represent the "+" part of "primary+" in the initial description of Primera-DCTL above. They implement a popular approach to color-constrained hue and "density" (luminance) using tetrahedral interpolation.
+These sliders represent the "+" part of "primary+" in the initial description of Primera-DCTL above. Six pairs of Hue and Density sliders — one for each of the primary and secondary colors (Red, Yellow, Green, Cyan, Blue, Magenta) — provide per-color control via tetrahedral interpolation of the RGB cube.
+
+Hue shifts are implemented as true Rodrigues rotations of each cube corner's chromatic component around the achromatic axis, giving perceptually uniform rotation across the entire hue wheel. Each slider's ±1.0 range maps to ±60° of rotation (one sextant), allowing any color to be pushed all the way to its neighbor. Density adds a uniform luminance offset to a given color region — positive brightens, negative darkens.
+
+The tetrahedral decomposition itself follows the standard Sakamoto method (6 tetrahedra along the black-white diagonal, selected by channel sort order), inspired by Steve Yedlin's work on display preparation and the many community DCTL implementations it spawned.
 
 ## Compatibility
 

@@ -14,6 +14,18 @@ DEFINE_UI_PARAMS(p_contrast, Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001
 DEFINE_UI_PARAMS(p_pivot_offset, Pivot Offset, DCTLUI_SLIDER_FLOAT, 0.0, -0.2, 0.2, 0.001)
 DEFINE_UI_PARAMS(p_sat, Saturation, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_preserve_lum, Preserve Luma - Sat, DCTLUI_CHECK_BOX, 0)
+DEFINE_UI_PARAMS(p_red_hue, Red Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_red_den, Red Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_yel_hue, Yellow Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_yel_den, Yellow Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_grn_hue, Green Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_grn_den, Green Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_cyn_hue, Cyan Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_cyn_den, Cyan Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_blu_hue, Blue Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_blu_den, Blue Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_mag_hue, Magenta Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_mag_den, Magenta Density, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 
 // ============================================================
 // ARRI LogC3 (EI 800)
@@ -264,6 +276,81 @@ __DEVICE__ float rolling_contrast(float x, float contrast, float pivot) {
 }
 
 // ============================================================
+// Tetrahedral interpolation
+// ============================================================
+
+// Build a cube corner from its identity position + hue rotation + density.
+// Hue: rotates the chromatic component around the achromatic (1,1,1) axis.
+// Density: uniform luminance offset applied to all three channels.
+__DEVICE__ float3 tetra_corner(float3 identity, float hue, float density) {
+    float angle = hue * 1.047198f; // slider +-1.0 -> +-60 degrees
+    float mean = (identity.x + identity.y + identity.z) / 3.0f;
+    float cx = identity.x - mean;
+    float cy = identity.y - mean;
+    float cz = identity.z - mean;
+
+    float cos_a = _cosf(angle);
+    float sin_a = _sinf(angle);
+    float k = 0.57735026919f; // 1/sqrt(3)
+
+    // Rodrigues rotation: v' = v*cos + (n x v)*sin, since n.v = 0
+    float rx = cx * cos_a + k * (cz - cy) * sin_a;
+    float ry = cy * cos_a + k * (cx - cz) * sin_a;
+    float rz = cz * cos_a + k * (cy - cx) * sin_a;
+
+    return make_float3(rx + mean + density, ry + mean + density, rz + mean + density);
+}
+
+// Tetrahedral interpolation of the RGB unit cube.
+// 6 tetrahedra along the black-white diagonal, selected by channel sort order.
+// Black = (0,0,0) and White = (1,1,1) are implicit.
+__DEVICE__ float3 tetra_interp(float r, float g, float b,
+                                float3 rc, float3 gc, float3 bc,
+                                float3 cc, float3 mc, float3 yc) {
+    float3 out;
+
+    if (r >= g && r >= b) {
+        if (g >= b) {
+            // R >= G >= B: Red, Yellow
+            out.x = r * rc.x + g * (yc.x - rc.x) + b * (1.0f - yc.x);
+            out.y = r * rc.y + g * (yc.y - rc.y) + b * (1.0f - yc.y);
+            out.z = r * rc.z + g * (yc.z - rc.z) + b * (1.0f - yc.z);
+        } else {
+            // R >= B > G: Red, Magenta
+            out.x = r * rc.x + b * (mc.x - rc.x) + g * (1.0f - mc.x);
+            out.y = r * rc.y + b * (mc.y - rc.y) + g * (1.0f - mc.y);
+            out.z = r * rc.z + b * (mc.z - rc.z) + g * (1.0f - mc.z);
+        }
+    } else if (g >= r && g >= b) {
+        if (r >= b) {
+            // G >= R >= B: Green, Yellow
+            out.x = g * gc.x + r * (yc.x - gc.x) + b * (1.0f - yc.x);
+            out.y = g * gc.y + r * (yc.y - gc.y) + b * (1.0f - yc.y);
+            out.z = g * gc.z + r * (yc.z - gc.z) + b * (1.0f - yc.z);
+        } else {
+            // G >= B > R: Green, Cyan
+            out.x = g * gc.x + b * (cc.x - gc.x) + r * (1.0f - cc.x);
+            out.y = g * gc.y + b * (cc.y - gc.y) + r * (1.0f - cc.y);
+            out.z = g * gc.z + b * (cc.z - gc.z) + r * (1.0f - cc.z);
+        }
+    } else {
+        if (r >= g) {
+            // B >= R >= G: Blue, Magenta
+            out.x = b * bc.x + r * (mc.x - bc.x) + g * (1.0f - mc.x);
+            out.y = b * bc.y + r * (mc.y - bc.y) + g * (1.0f - mc.y);
+            out.z = b * bc.z + r * (mc.z - bc.z) + g * (1.0f - mc.z);
+        } else {
+            // B >= G > R: Blue, Cyan
+            out.x = b * bc.x + g * (cc.x - bc.x) + r * (1.0f - cc.x);
+            out.y = b * bc.y + g * (cc.y - bc.y) + r * (1.0f - cc.y);
+            out.z = b * bc.z + g * (cc.z - bc.z) + r * (1.0f - cc.z);
+        }
+    }
+
+    return out;
+}
+
+// ============================================================
 // Dispatch helpers
 // ============================================================
 
@@ -368,6 +455,26 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
                 b *= ratio;
             }
         }
+    }
+
+    // Per-color hue and density: tetrahedral interpolation in log space
+    // Guard: skip for out-of-range pixels; skip if all params are identity
+    if (r >= 0.0f && g >= 0.0f && b >= 0.0f &&
+        (p_red_hue != 0.0f || p_red_den != 0.0f || p_grn_hue != 0.0f || p_grn_den != 0.0f ||
+         p_blu_hue != 0.0f || p_blu_den != 0.0f || p_cyn_hue != 0.0f || p_cyn_den != 0.0f ||
+         p_mag_hue != 0.0f || p_mag_den != 0.0f || p_yel_hue != 0.0f || p_yel_den != 0.0f)) {
+
+        float3 rc = tetra_corner(make_float3(1.0f, 0.0f, 0.0f), p_red_hue, p_red_den);
+        float3 gc = tetra_corner(make_float3(0.0f, 1.0f, 0.0f), p_grn_hue, p_grn_den);
+        float3 bc = tetra_corner(make_float3(0.0f, 0.0f, 1.0f), p_blu_hue, p_blu_den);
+        float3 cc = tetra_corner(make_float3(0.0f, 1.0f, 1.0f), p_cyn_hue, p_cyn_den);
+        float3 mc = tetra_corner(make_float3(1.0f, 0.0f, 1.0f), p_mag_hue, p_mag_den);
+        float3 yc = tetra_corner(make_float3(1.0f, 1.0f, 0.0f), p_yel_hue, p_yel_den);
+
+        float3 result = tetra_interp(r, g, b, rc, gc, bc, cc, mc, yc);
+        r = result.x;
+        g = result.y;
+        b = result.z;
     }
 
     return make_float3(r, g, b);
