@@ -1,0 +1,328 @@
+// Primera-DCTL v0.1
+// Primary+ color grading DCTL for DaVinci Resolve Studio
+// All-in-one clip-level primary grading tool
+
+// ============================================================
+// UI Parameters
+// ============================================================
+
+DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_PINES2, TF_DI}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, Pines2, DaVinci Intermediate})
+DEFINE_UI_PARAMS(p_exposure, Exposure Stops, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
+DEFINE_UI_PARAMS(p_temp, Temp, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_tint, Tint, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_sat, Saturation, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(p_preserve_lum, Preserve Luminance (Sat.), DCTLUI_CHECK_BOX, 0)
+
+// ============================================================
+// ARRI LogC3 (EI 800)
+// ============================================================
+
+__DEVICE__ float logc3_to_lin(float x) {
+    const float a = 5.555556f;
+    const float b = 0.052272f;
+    const float c = 0.247190f;
+    const float d = 0.385537f;
+    const float e = 5.367655f;
+    const float f = 0.092809f;
+    const float cut = 0.010591f;
+    const float ecf = e * cut + f;
+
+    return (x > ecf) ? (_powf(10.0f, (x - d) / c) - b) / a : (x - f) / e;
+}
+
+__DEVICE__ float lin_to_logc3(float x) {
+    const float a = 5.555556f;
+    const float b = 0.052272f;
+    const float c = 0.247190f;
+    const float d = 0.385537f;
+    const float e = 5.367655f;
+    const float f = 0.092809f;
+    const float cut = 0.010591f;
+
+    return (x > cut) ? c * _log10f(a * x + b) + d : e * x + f;
+}
+
+// ============================================================
+// ARRI LogC4
+// Source: colour-science / ARRI LogC4 Specification
+// ============================================================
+
+__DEVICE__ float logc4_to_lin(float x) {
+    const float a = (262144.0f - 16.0f) / 117.45f;
+    const float b = (1023.0f - 95.0f) / 1023.0f;
+    const float c = 95.0f / 1023.0f;
+    const float s = (7.0f * 0.6931471805599453f * _powf(2.0f, 7.0f - 14.0f * c / b)) / (a * b);
+    const float t = (_powf(2.0f, 14.0f * (-c / b) + 6.0f) - 64.0f) / a;
+
+    return (x >= 0.0f) ? (_powf(2.0f, 14.0f * ((x - c) / b) + 6.0f) - 64.0f) / a : x * s + t;
+}
+
+__DEVICE__ float lin_to_logc4(float x) {
+    const float a = (262144.0f - 16.0f) / 117.45f;
+    const float b = (1023.0f - 95.0f) / 1023.0f;
+    const float c = 95.0f / 1023.0f;
+    const float s = (7.0f * 0.6931471805599453f * _powf(2.0f, 7.0f - 14.0f * c / b)) / (a * b);
+    const float t = (_powf(2.0f, 14.0f * (-c / b) + 6.0f) - 64.0f) / a;
+
+    return (x >= t) ? (_log2f(a * x + 64.0f) - 6.0f) / 14.0f * b + c : (x - t) / s;
+}
+
+// ============================================================
+// REDLog3G10 (v3 / IPP2)
+// Source: colour-science / RED specification
+// ============================================================
+
+__DEVICE__ float redlog3g10_to_lin(float y) {
+    const float a = 0.224282f;
+    const float b = 155.975327f;
+    const float c = 0.01f;
+    const float g = 15.1927f;
+
+    return (y < 0.0f) ? (y / g) - c : (_powf(10.0f, y / a) - 1.0f) / b - c;
+}
+
+__DEVICE__ float lin_to_redlog3g10(float x) {
+    const float a = 0.224282f;
+    const float b = 155.975327f;
+    const float c = 0.01f;
+    const float g = 15.1927f;
+    float xc = x + c;
+
+    return (xc < 0.0f) ? xc * g : a * _log10f(xc * b + 1.0f);
+}
+
+// ============================================================
+// Sony S-Log3
+// Source: Sony S-Log3 Technical Summary
+// ============================================================
+
+__DEVICE__ float slog3_to_lin(float x) {
+    const float cut = 171.2102946929f / 1023.0f;
+
+    if (x >= cut)
+        return _powf(10.0f, (x * 1023.0f - 420.0f) / 261.5f) * 0.19f - 0.01f;
+    else
+        return (x * 1023.0f - 95.0f) * 0.01125f / (171.2102946929f - 95.0f);
+}
+
+__DEVICE__ float lin_to_slog3(float x) {
+    const float cut = 0.01125f;
+
+    if (x >= cut)
+        return (420.0f + _log10f((x + 0.01f) / 0.19f) * 261.5f) / 1023.0f;
+    else
+        return (x * (171.2102946929f - 95.0f) / 0.01125f + 95.0f) / 1023.0f;
+}
+
+// ============================================================
+// ACEScct
+// Source: ACES S-2016-001
+// ============================================================
+
+__DEVICE__ float acescct_to_lin(float x) {
+    const float cut = 0.155251141552511f;
+    const float slope = 10.5402377416545f;
+    const float offset = 0.0729055341958355f;
+
+    return (x > cut) ? _powf(2.0f, x * 17.52f - 9.72f) : (x - offset) / slope;
+}
+
+__DEVICE__ float lin_to_acescct(float x) {
+    const float cut = 0.0078125f;
+    const float slope = 10.5402377416545f;
+    const float offset = 0.0729055341958355f;
+
+    return (x > cut) ? (_log2f(x) + 9.72f) / 17.52f : slope * x + offset;
+}
+
+// ============================================================
+// Pines2
+// Clean-room implementation of the log2-based encoding
+// designed by Josh Pines. Constants derived from the published
+// specification: 50 code values/stop, mid-gray at 400 (10-bit),
+// with a linear toe below the log/linear crossover point.
+// ============================================================
+
+__DEVICE__ float pines2_to_lin(float x) {
+    const float log_brkpnt = 0.16129f;
+    const float slope = 10.367739f;
+    const float yint = 0.0907775f;
+
+    return (x <= log_brkpnt) ? (x - yint) / slope : _powf(2.0f, x * 20.46f - 10.5f);
+}
+
+__DEVICE__ float lin_to_pines2(float x) {
+    const float lin_brkpnt = 0.00680f;
+    const float slope = 10.367739f;
+    const float yint = 0.0907775f;
+
+    return (x <= lin_brkpnt) ? slope * x + yint : (_log2f(x) + 10.5f) / 20.46f;
+}
+
+// ============================================================
+// DaVinci Intermediate
+// Source: colour-science / Blackmagic Design
+// ============================================================
+
+__DEVICE__ float di_to_lin(float x) {
+    const float A = 0.0075f;
+    const float B = 7.0f;
+    const float C = 0.07329248f;
+    const float M = 10.44426855f;
+    const float LOG_CUT = 0.02740668f;
+
+    return (x <= LOG_CUT) ? x / M : _powf(2.0f, x / C - B) - A;
+}
+
+__DEVICE__ float lin_to_di(float x) {
+    const float A = 0.0075f;
+    const float B = 7.0f;
+    const float C = 0.07329248f;
+    const float M = 10.44426855f;
+    const float LIN_CUT = 0.00262409f;
+
+    return (x <= LIN_CUT) ? x * M : C * (_log2f(x + A) + B);
+}
+
+// ============================================================
+// Color space helpers
+// ============================================================
+
+__DEVICE__ float3 rgb_to_hsv(float3 rgb) {
+    float r = rgb.x, g = rgb.y, b = rgb.z;
+    float cmax = _fmaxf(r, _fmaxf(g, b));
+    float cmin = _fminf(r, _fminf(g, b));
+    float delta = cmax - cmin;
+
+    float h = 0.0f;
+    if (delta > 0.0f) {
+        if (cmax == r)      h = (g - b) / delta;
+        else if (cmax == g) h = (b - r) / delta + 2.0f;
+        else                h = (r - g) / delta + 4.0f;
+        if (h < 0.0f) h += 6.0f;
+        h /= 6.0f;
+    }
+
+    float s = (cmax > 0.0f) ? delta / cmax : 0.0f;
+    return make_float3(h, s, cmax);
+}
+
+__DEVICE__ float3 hsv_to_rgb(float3 hsv) {
+    float h = hsv.x * 6.0f;
+    float s = hsv.y;
+    float v = hsv.z;
+
+    float c = v * s;
+    float x = c * (1.0f - _fabs(h - 2.0f * _floorf(h * 0.5f) - 1.0f));
+    float m = v - c;
+
+    float r, g, b;
+    if      (h < 1.0f) { r = c; g = x; b = 0.0f; }
+    else if (h < 2.0f) { r = x; g = c; b = 0.0f; }
+    else if (h < 3.0f) { r = 0.0f; g = c; b = x; }
+    else if (h < 4.0f) { r = 0.0f; g = x; b = c; }
+    else if (h < 5.0f) { r = x; g = 0.0f; b = c; }
+    else               { r = c; g = 0.0f; b = x; }
+
+    return make_float3(r + m, g + m, b + m);
+}
+
+__DEVICE__ float luminance(float r, float g, float b) {
+    return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+}
+
+// ============================================================
+// Dispatch helpers
+// ============================================================
+
+__DEVICE__ float decode(float x, int tf) {
+    switch (tf) {
+        case 0: return logc3_to_lin(x);
+        case 1: return logc4_to_lin(x);
+        case 2: return redlog3g10_to_lin(x);
+        case 3: return slog3_to_lin(x);
+        case 4: return acescct_to_lin(x);
+        case 5: return pines2_to_lin(x);
+        case 6: return di_to_lin(x);
+        default: return x;
+    }
+}
+
+__DEVICE__ float encode(float x, int tf) {
+    switch (tf) {
+        case 0: return lin_to_logc3(x);
+        case 1: return lin_to_logc4(x);
+        case 2: return lin_to_redlog3g10(x);
+        case 3: return lin_to_slog3(x);
+        case 4: return lin_to_acescct(x);
+        case 5: return lin_to_pines2(x);
+        case 6: return lin_to_di(x);
+        default: return x;
+    }
+}
+
+// ============================================================
+// Main Transform
+// ============================================================
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) {
+
+    // Decode: log -> linear
+    float r = decode(p_R, p_tf);
+    float g = decode(p_G, p_tf);
+    float b = decode(p_B, p_tf);
+
+    // Exposure: linear gain in stops (Gain = 2^n)
+    float gain = _powf(2.0f, p_exposure);
+    r *= gain;
+    g *= gain;
+    b *= gain;
+
+    // Color Balance: per-channel gains in linear light
+    // Temp: blue-yellow axis (R and B inversely, G untouched)
+    // Tint: green-magenta axis (G adjusted, R and B untouched)
+    r *= _powf(2.0f,  p_temp);
+    b *= _powf(2.0f, -p_temp);
+    g *= _powf(2.0f,  p_tint);
+
+    // Encode: linear -> log
+    r = encode(r, p_tf);
+    g = encode(g, p_tf);
+    b = encode(b, p_tf);
+
+    // Saturation (operates in log-encoded space)
+    if (p_sat != 0.0f) {
+        float luma_before = luminance(r, g, b);
+
+        if (p_sat > 0.0f) {
+            // Positive: gain on S channel in HSV
+            float3 hsv = rgb_to_hsv(make_float3(r, g, b));
+            hsv.y *= _powf(2.0f, p_sat);
+            hsv.y = _fminf(hsv.y, 1.0f);
+            float3 rgb_sat = hsv_to_rgb(hsv);
+            r = rgb_sat.x;
+            g = rgb_sat.y;
+            b = rgb_sat.z;
+        } else {
+            // Negative: desaturate by mixing toward luminance in RGB
+            float factor = 1.0f + p_sat;
+            float luma = luma_before;
+            r = luma + (r - luma) * factor;
+            g = luma + (g - luma) * factor;
+            b = luma + (b - luma) * factor;
+        }
+
+        // Preserve Luminance: restore pre-saturation brightness
+        if (p_preserve_lum == 1) {
+            float luma_after = luminance(r, g, b);
+            if (luma_after > 0.0f) {
+                float ratio = luma_before / luma_after;
+                r *= ratio;
+                g *= ratio;
+                b *= ratio;
+            }
+        }
+    }
+
+    return make_float3(r, g, b);
+}
