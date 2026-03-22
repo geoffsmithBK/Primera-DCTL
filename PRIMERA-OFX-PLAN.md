@@ -352,26 +352,25 @@ float mtxCWP[9];        // creative whitepoint CAT02
 float cwpScale;         // whitepoint normalization
 ```
 
-- [ ] **Step 2: Add Input page gamut param and Render page params to PrimeraPlugin.cpp**
+- [ ] **Step 2: Add Input page gamut param and OpenDRT page params to PrimeraPlugin.cpp**
 
 Page "Input" (extend from Task 1):
 - Input Gamut (choice: 15 options — XYZ, AP0, AP1, P3-D65, Rec.2020, Rec.709, ARRI WG3, ARRI WG4, RED WG, Sony SGamut3, SGamut3.Cine, V-Gamut, E-Gamut, E-Gamut2, DaVinci WG)
 
 **Note:** Input Transfer Function and Input Gamut must correspond to the source material (e.g., LogC3 + ARRI WG3, S-Log3 + SGamut3). The plugin does not enforce this — the colorist must select the correct combination. Mismatched settings produce incorrect color. Consider adding a tooltip hint on the Input Gamut param explaining this.
 
-Page "Render":
-- Enable DRT (boolean, default true)
-- Group "Tonescale":
-  - Tonescale Preset (choice: 14 presets from OpenDRT — Standard, ACES 1.x, ACES 2.0, etc.; default Standard)
-  - Display Peak Luminance (100-4000, default 100)
-  - Display Grey Luminance (3-25, default 10)
-  - HDR Grey Boost (0-1, default 0.13)
-- Group "Purity": HDR Purity (0-1, default 0.5)
-- Display Gamut (choice: Rec.709, P3-D65, P3-D60, P3-DCI, Rec.2020 P3-limited, XYZ-DCI)
-- Display EOTF (choice: Linear, sRGB 2.2, Rec.1886 2.4, DCI 2.6, PQ ST.2084, HLG)
-- Surround (choice: Dark, Dim, Average; default Dim — modulates tonescale power via `ts_p = tn_con / (1 + surround * 0.05)`)
-- Creative Whitepoint (choice: D65, D60, D55, D50)
+Page "OpenDRT" (flat layout, no subgroups, ordered to match OpenDRT DCTL):
+- Enable OpenDRT (boolean, default true)
+- Display Peak Luminance (100-4000, default 100)
+- HDR Grey Boost (0-1, default 0.13)
+- HDR Purity (0-1, default 0.5)
+- Display Grey Luminance (3-25, default 10)
+- Surround (choice: Dark, Dim, Average; default Dim)
 - Look Preset (choice: Standard, Arriba, Sylvan, Colorful, Aery, Dystopic, Umbra, Base)
+- Tonescale Preset (choice: 14 presets from OpenDRT — Use Look Preset, Low/Medium/High Contrast, etc.)
+- Creative Whitepoint (choice: Use Look Preset, D93, D75, D65, D60, D55, D50)
+- CWP Range (0-1, default 0.25)
+- Display Encoding (choice: 9 combined gamut+EOTF presets — Rec 1886, sRGB Display, Display P3, etc.)
 
 - [ ] **Step 3: Bake gamut matrices into shader and CPU selection logic**
 
@@ -490,7 +489,7 @@ From OpenDRT DCTL lines 1135-1155:
 
 - [ ] **Step 8: Add Look Preset choice param (optional)**
 
-Choice param on Render page: Standard (default), plus other OpenDRT presets.
+Choice param on OpenDRT page: Standard (default), plus other OpenDRT presets.
 Each preset is a set of constant values for brilliance, hue shift, purity compression rates, and contrast params. A switch in `setupAndProcess()` fills a `DRTLookParams` sub-struct within `PrimeraGPUParams`.
 
 - [ ] **Step 9: Build, install, verify**
@@ -628,27 +627,29 @@ git commit -m "feat(ofx): polish, license headers, production readiness"
 | Grade | Saturation | Preserve Luma | bool | false | — |
 | Grade | Per-Color | Red/Yel/Grn/Cyn/Blu/Mag Hue | 6x double | 0.0 | [-1, 1] |
 | Grade | Per-Color | Red/Yel/Grn/Cyn/Blu/Mag Density | 6x double | 0.0 | [-1, 1] |
-| Render | — | Enable DRT | bool | true | — |
-| Render | Tonescale | Tonescale Preset | choice | Standard | 14 options |
-| Render | Tonescale | Display Peak Luminance | double | 100.0 | [100, 4000] |
-| Render | Tonescale | Display Grey Luminance | double | 10.0 | [3, 25] |
-| Render | Tonescale | HDR Grey Boost | double | 0.13 | [0, 1] |
-| Render | Purity | HDR Purity | double | 0.5 | [0, 1] |
-| Render | — | Display Gamut | choice | Rec.709 | 6 options |
-| Render | — | Display EOTF | choice | Rec.1886 2.4 | 6 options (incl. Linear) |
-| Render | — | Surround | choice | Dim | 3 options |
-| Render | — | Creative Whitepoint | choice | D65 | 4 options |
-| Render | — | Look Preset | choice | Standard | 8 options |
+| OpenDRT | — | Enable OpenDRT | bool | true | — |
+| OpenDRT | — | Display Peak Luminance | double | 100.0 | [100, 4000] |
+| OpenDRT | — | HDR Grey Boost | double | 0.13 | [0, 1] |
+| OpenDRT | — | HDR Purity | double | 0.5 | [0, 1] |
+| OpenDRT | — | Display Grey Luminance | double | 10.0 | [3, 25] |
+| OpenDRT | — | Surround | choice | Dim | 3 options |
+| OpenDRT | — | Look Preset | choice | Standard | 8 options |
+| OpenDRT | — | Tonescale Preset | choice | Use Look Preset | 14 options |
+| OpenDRT | — | Creative Whitepoint | choice | Use Look Preset | 7 options |
+| OpenDRT | — | CWP Range | double | 0.25 | [0, 1] |
+| OpenDRT | — | Display Encoding | choice | Rec 1886 | 9 options |
 | Diagnostics | — | Show Chart | bool | false | — |
 | Diagnostics | — | Show Tonescale Overlay | bool | false | — |
 | **Total** | | | | | **41 params** |
 
 **Notes:**
 - Input TF and Input Gamut must correspond (e.g., LogC3 + ARRI WG3). The plugin does not enforce this.
+- The OpenDRT page is a flat layout (no subgroups) ordered to match the OpenDRT DCTL: display settings first (Peak Luminance, HDR Grey Boost, HDR Purity, Grey Luminance, Surround), then presets (Look, Tonescale, Creative WP, CWP Range, Display Encoding).
 - Tonescale Preset selects from OpenDRT's 14 tonescale presets (shape parameters: contrast, shoulder clip, toe, offset). Look Preset selects from 8 look presets (perceptual parameters: brilliance, hue shifts, purity rates).
 - Surround modulates the tonescale power: `ts_p = tn_con / (1 + surround * 0.05)` where surround is 0 (Dark), 1 (Dim), or 2 (Average).
-- Display EOTF "Linear" outputs scene-linear values (useful for further downstream processing or monitoring).
+- Display Encoding combines display gamut and EOTF into preset combinations (e.g., "Rec 1886" = Rec.709 gamut + 2.4 power EOTF).
 - Output clamp is always enabled (hardcoded to true). Values are clamped [0, 1] after EOTF application.
+- The tonescale overlay curve tracks through all Primera grading stages (exposure, black point, contrast, shadows, highlights, roll-off) before entering the DRT pipeline, reflecting the full signal chain.
 
 ## Potential Risks
 
