@@ -6,7 +6,7 @@
 // UI Parameters
 // ============================================================
 
-DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_PINES2, TF_DI, TF_CINEON}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, Pines2, DaVinci Intermediate, Cineon})
+DEFINE_UI_PARAMS(p_tf, Transfer Function, DCTLUI_COMBO_BOX, 0, {TF_LOGC3, TF_LOGC4, TF_REDLOG3G10, TF_SLOG3, TF_ACESCCT, TF_DI, TF_CINEON}, {ARRI LogC3, ARRI LogC4, REDLog3G10, Sony S-Log3, ACEScct, DaVinci Intermediate, Cineon})
 DEFINE_UI_PARAMS(p_exposure, Exposure Stops, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
 DEFINE_UI_PARAMS(p_bp, Black Point, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
 DEFINE_UI_PARAMS(p_temp, Temp, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
@@ -95,13 +95,9 @@ __DEVICE__ int tf_name_char(int tf, int pos) {
             if (pos==0) return 'A'; if (pos==1) return 'C'; if (pos==2) return 'E';
             if (pos==3) return 'S'; if (pos==4) return 'C'; if (pos==5) return 'C';
             if (pos==6) return 'T'; return 0;
-        case 5: // PINES2
-            if (pos==0) return 'P'; if (pos==1) return 'I'; if (pos==2) return 'N';
-            if (pos==3) return 'E'; if (pos==4) return 'S'; if (pos==5) return '2';
-            return 0;
-        case 6: // DI
+        case 5: // DI
             if (pos==0) return 'D'; if (pos==1) return 'I'; return 0;
-        case 7: // CINEON
+        case 6: // CINEON
             if (pos==0) return 'C'; if (pos==1) return 'I'; if (pos==2) return 'N';
             if (pos==3) return 'E'; if (pos==4) return 'O'; if (pos==5) return 'N';
             return 0;
@@ -112,8 +108,8 @@ __DEVICE__ int tf_name_char(int tf, int pos) {
 __DEVICE__ int tf_name_len(int tf) {
     switch (tf) {
         case 0: return 5;  case 1: return 5;  case 2: return 10;
-        case 3: return 5;  case 4: return 7;  case 5: return 6;
-        case 6: return 2;  case 7: return 6;  default: return 0;
+        case 3: return 5;  case 4: return 7;  case 5: return 2;
+        case 6: return 6;  default: return 0;
     }
 }
 
@@ -237,30 +233,6 @@ __DEVICE__ float lin_to_acescct(float x) {
     const float offset = 0.0729055341958355f;
 
     return (x > cut) ? (_log2f(x) + 9.72f) / 17.52f : slope * x + offset;
-}
-
-// ============================================================
-// Pines2
-// Clean-room implementation of the log2-based encoding
-// designed by Josh Pines. Constants derived from the published
-// specification: 50 code values/stop, mid-gray at 400 (10-bit),
-// with a linear toe below the log/linear crossover point.
-// ============================================================
-
-__DEVICE__ float pines2_to_lin(float x) {
-    const float log_brkpnt = 0.16129f;
-    const float slope = 10.367739f;
-    const float yint = 0.0907775f;
-
-    return (x <= log_brkpnt) ? (x - yint) / slope : _powf(2.0f, x * 20.46f - 10.5f);
-}
-
-__DEVICE__ float lin_to_pines2(float x) {
-    const float lin_brkpnt = 0.00680f;
-    const float slope = 10.367739f;
-    const float yint = 0.0907775f;
-
-    return (x <= lin_brkpnt) ? slope * x + yint : (_log2f(x) + 10.5f) / 20.46f;
 }
 
 // ============================================================
@@ -502,9 +474,8 @@ __DEVICE__ float decode(float x, int tf) {
         case 2: return redlog3g10_to_lin(x);
         case 3: return slog3_to_lin(x);
         case 4: return acescct_to_lin(x);
-        case 5: return pines2_to_lin(x);
-        case 6: return di_to_lin(x);
-        case 7: return cineon_to_lin(x);
+        case 5: return di_to_lin(x);
+        case 6: return cineon_to_lin(x);
         default: return x;
     }
 }
@@ -516,9 +487,8 @@ __DEVICE__ float encode(float x, int tf) {
         case 2: return lin_to_redlog3g10(x);
         case 3: return lin_to_slog3(x);
         case 4: return lin_to_acescct(x);
-        case 5: return lin_to_pines2(x);
-        case 6: return lin_to_di(x);
-        case 7: return lin_to_cineon(x);
+        case 5: return lin_to_di(x);
+        case 6: return lin_to_cineon(x);
         default: return x;
     }
 }

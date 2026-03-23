@@ -22,7 +22,6 @@ It is designed to be used in the context of a fully color-managed workflow and s
 - REDLog3G10
 - Sony S-Log3
 - ACEScct
-- Pines2 (based on Josh Pines' log2 encoding specification)
 - DaVinci Intermediate
 - Cineon
 
