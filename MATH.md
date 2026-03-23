@@ -1,6 +1,6 @@
 # Primera DCTL — Mathematical Reference
 
-Desmos-ready expressions for every function in Primera.dctl. Paste directly into [Desmos](https://www.desmos.com/calculator) to visualize.
+Desmos-ready expressions for the grading operations in Primera.dctl. Paste directly into [Desmos](https://www.desmos.com/calculator) to visualize.
 
 Desmos conventions used below:
 - `\left\{condition: value\right\}` for piecewise
@@ -9,142 +9,7 @@ Desmos conventions used below:
 
 ---
 
-## 1. Transfer Functions (Log ↔ Linear)
-
-### ARRI LogC3 (EI 800)
-
-**Decode (log → linear):**
-
-```
-a = 5.555556
-b = 0.052272
-c = 0.247190
-d = 0.385537
-e = 5.367655
-f = 0.092809
-\operatorname{cut} = e \cdot 0.010591 + f
-
-y = \left\{x > \operatorname{cut}: \frac{10^{(x - d)/c} - b}{a},\ \frac{x - f}{e}\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x > 0.010591: c \cdot \log_{10}(a \cdot x + b) + d,\ e \cdot x + f\right\}
-```
-
-### ARRI LogC4
-
-**Decode (log → linear):**
-
-```
-a = \frac{262144 - 16}{117.45}
-b = \frac{1023 - 95}{1023}
-c = \frac{95}{1023}
-s = \frac{7 \cdot \ln(2) \cdot 2^{7 - 14c/b}}{a \cdot b}
-t = \frac{2^{14(-c/b) + 6} - 64}{a}
-
-y = \left\{x \ge 0: \frac{2^{14 \cdot ((x - c)/b) + 6} - 64}{a},\ x \cdot s + t\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x \ge t: \frac{\log_2(a \cdot x + 64) - 6}{14} \cdot b + c,\ \frac{x - t}{s}\right\}
-```
-
-### REDLog3G10 (v3 / IPP2)
-
-**Decode (log → linear):**
-
-```
-a = 0.224282
-b = 155.975327
-c = 0.01
-g = 15.1927
-
-y = \left\{x < 0: \frac{x}{g} - c,\ \frac{10^{x/a} - 1}{b} - c\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x + c < 0: (x + c) \cdot g,\ a \cdot \log_{10}((x + c) \cdot b + 1)\right\}
-```
-
-### Sony S-Log3
-
-**Decode (log → linear):**
-
-```
-\operatorname{cut} = \frac{171.2102946929}{1023}
-
-y = \left\{x \ge \operatorname{cut}: 10^{(x \cdot 1023 - 420)/261.5} \cdot 0.19 - 0.01,\ \frac{(x \cdot 1023 - 95) \cdot 0.01125}{171.2102946929 - 95}\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x \ge 0.01125: \frac{420 + \log_{10}\left(\frac{x + 0.01}{0.19}\right) \cdot 261.5}{1023},\ \frac{x \cdot \frac{171.2102946929 - 95}{0.01125} + 95}{1023}\right\}
-```
-
-### ACEScct
-
-**Decode (log → linear):**
-
-```
-\operatorname{cut} = 0.155251141552511
-s = 10.5402377416545
-o = 0.0729055341958355
-
-y = \left\{x > \operatorname{cut}: 2^{x \cdot 17.52 - 9.72},\ \frac{x - o}{s}\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x > 0.0078125: \frac{\log_2(x) + 9.72}{17.52},\ s \cdot x + o\right\}
-```
-
-### DaVinci Intermediate
-
-**Decode (log → linear):**
-
-```
-A = 0.0075
-B = 7
-C = 0.07329248
-M = 10.44426855
-\operatorname{cut} = 0.02740668
-
-y = \left\{x \le \operatorname{cut}: \frac{x}{M},\ 2^{x/C - B} - A\right\}
-```
-
-**Encode (linear → log):**
-
-```
-y = \left\{x \le 0.00262409: x \cdot M,\ C \cdot (\log_2(x + A) + B)\right\}
-```
-
-### Cineon
-
-**Decode (log → linear):**
-
-```
-o = 0.0108
-
-y = \frac{10^{(x \cdot 1023 - 685)/300} - o}{1 - o}
-```
-
-**Encode (linear → log):**
-
-```
-y = \frac{\log_{10}(x \cdot (1 - o) + o) \cdot 300 + 685}{1023}
-```
-
----
-
-## 2. Grading Operations
+## 1. Grading Operations
 
 ### Exposure
 
@@ -264,7 +129,7 @@ R_{\operatorname{out}} = L + (R - L) \cdot f
 
 ---
 
-## 3. Tetrahedral Interpolation — Hue & Density
+## 2. Tetrahedral Interpolation — Hue & Density
 
 ### Rodrigues Rotation (Hue Shift per Cube Corner)
 
@@ -294,11 +159,3 @@ Six tetrahedra along the black–white diagonal, selected by channel sort order.
 ```
 
 *(Analogous for G, B channels and other sort orders.)*
-
----
-
-## 4. Rec.709 Luminance
-
-```
-L = 0.2126 \cdot R + 0.7152 \cdot G + 0.0722 \cdot B
-```
