@@ -1,9 +1,0 @@
-# Symlinks to OFX SDK (machine-local paths)
-OFXInc
-OFXSupportInc
-OFXSupport
-
-# Build artifacts
-*.o
-*.ofx
-*.ofx.bundle/
