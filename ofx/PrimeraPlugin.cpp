@@ -1033,7 +1033,7 @@ void PrimeraPluginFactory::describe(OFX::ImageEffectDescriptor& p_Desc)
 
     p_Desc.setSupportsMetalRender(true);
 
-    p_Desc.setNoSpatialAwareness(true);
+    p_Desc.setSupportsTiles(false);
 
     p_Desc.setOverlayInteractDescriptor(new PrimeraOverlayDescriptor());
 }
