@@ -61,7 +61,7 @@ Another "smart" or "combo" slider. Increasing saturation works by applying posit
 
 These sliders represent the "+" part of "primary+" in the initial description of Primera-DCTL above. Six pairs of Hue and Density sliders — one for each of the primary and secondary colors (Red, Yellow, Green, Cyan, Blue, Magenta) — provide per-color control via tetrahedral interpolation of the RGB cube.
 
-Hue shifts are implemented as true <a href="https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula">"Rodrigues rotations</a> of each cube corner's chromatic component around the achromatic axis, giving perceptually uniform rotation across the entire hue wheel. Each slider's +/-1.0 range maps to +/-60 degrees of rotation (one sextant), allowing any color to be pushed all the way to its neighbor. Density adds a uniform luminance offset to a given color region — positive brightens, negative darkens.
+Hue shifts are implemented as true <a href="https://en.wikipedia.org/wiki/Rodrigues'_rotation_formula">"Rodrigues rotations</a> of each cube corner's chromatic component around the achromatic axis, giving perceptually uniform rotation across the entire hue wheel. Each slider's +/-1.0 range maps to +/-60 degrees of rotation (one sextant), allowing any color to be pushed all the way to its neighbor. Density adds a uniform luminance offset to a given color region — positive brightens, negative darkens.
 
 The tetrahedral decomposition itself follows the standard <a href="https://patents.google.com/patent/US4511989A">Sakamoto method</a> (6 tetrahedra along the black-white diagonal, selected by channel sort order). Inspired by <a href="https://www.yedlin.net/DisplayPrepDemo/DispPrepDemoFollowup.html">Steve Yedlin's</a> work on display preparation and the many community DCTL implementations it spawned.
 
@@ -87,10 +87,11 @@ Primera-DCTL can also be used as a starting point for look development when appl
 
 Primera-DCTL wouldn't exist without the contributions, and generously shared knowledge, of many named and unnamed members of the "Color-Concerned Community":
 
-<a href="https://antlerpost.com/colour-spaces/">Nick Shaw</a>
-<a href="https://github.com/jedypod">Jed Smith</a>
-<a href="https://github.com/baldavenger">Paul Dore</a>
-<a href="https://github.com/https://github.com/thatcherfreeman">Thatcher Freeman</a>
-<a href="https://github.com/hotgluebanjo">Calvin Silly</a>
-<a href="https://www.youtube.com/@KaurH">Kaur Hendrikson</a>
-<a href="https://blog.kasson.com/about-2/patents-and-papers-about-color/">J.M. Kasson</a>
+- <a href="https://antlerpost.com/colour-spaces/">Nick Shaw</a>
+- <a href="https://github.com/jedypod">Jed Smith</a>
+- <a href="https://github.com/baldavenger">Paul Dore</a>
+- <a href="https://x.com/Sir_Daniele">Daniele Siragusano</a>
+- <a href="https://github.com/https://github.com/thatcherfreeman">Thatcher Freeman</a>
+- <a href="https://github.com/hotgluebanjo">Calvin Silly</a>
+- <a href="https://www.youtube.com/@KaurH">Kaur Hendrikson</a>
+- <a href="https://blog.kasson.com/about-2/patents-and-papers-about-color/">J.M. Kasson</a>
